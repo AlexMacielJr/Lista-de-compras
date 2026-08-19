@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Wallet, Tag, Calculator, Calendar, ArrowLeft, User, TrendingUp, TrendingDown, Edit2, X } from 'lucide-react';
+import { Plus, Trash2, Wallet, Tag, Calculator, Calendar, ArrowLeft, User, TrendingUp, TrendingDown, Edit2, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { ExpenseItem, HouseholdUser } from '../types';
 
@@ -43,6 +43,10 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [newPaidBy, setNewPaidBy] = useState(users.length > 0 ? users[0].name : '');
   const [editingId, setEditingId] = useState<string | null>(null);
+  
+  const [currentMonthDate, setCurrentMonthDate] = useState(() => new Date());
+  const [paymentType, setPaymentType] = useState<'vista' | 'parcelado'>('vista');
+  const [installmentsCount, setInstallmentsCount] = useState<number>(2);
 
   useEffect(() => {
     localStorage.setItem('monthly-expenses', JSON.stringify(expenses));
@@ -68,21 +72,47 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
       ));
       setEditingId(null);
     } else {
-      const newExpense: ExpenseItem = {
-        id: crypto.randomUUID(),
-        description: newDesc.trim(),
-        amount: Number(newAmount),
-        date: new Date().toISOString().split('T')[0],
-        category: newCategory,
-        tags: selectedTags,
-        paidBy: newPaidBy || undefined
-      };
-      setExpenses([newExpense, ...expenses]);
+      if (selectedTags.includes('Cartão de Crédito') && paymentType === 'parcelado') {
+        const numInst = Math.max(2, installmentsCount);
+        const instAmount = Number(newAmount) / numInst;
+        const newExpensesArr: ExpenseItem[] = [];
+        const today = new Date();
+        
+        for (let i = 0; i < numInst; i++) {
+          const d = new Date(today.getFullYear(), today.getMonth() + i, today.getDate());
+          const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          newExpensesArr.push({
+            id: crypto.randomUUID(),
+            description: `${newDesc.trim()} (${i + 1}/${numInst})`,
+            amount: instAmount,
+            date: dateStr,
+            category: newCategory,
+            tags: selectedTags,
+            paidBy: newPaidBy || undefined
+          });
+        }
+        setExpenses([...newExpensesArr, ...expenses]);
+      } else {
+        const today = new Date();
+        const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        const newExpense: ExpenseItem = {
+          id: crypto.randomUUID(),
+          description: newDesc.trim(),
+          amount: Number(newAmount),
+          date: dateStr,
+          category: newCategory,
+          tags: selectedTags,
+          paidBy: newPaidBy || undefined
+        };
+        setExpenses([newExpense, ...expenses]);
+      }
     }
 
     setNewDesc('');
     setNewAmount('');
     setSelectedTags([]);
+    setPaymentType('vista');
+    setInstallmentsCount(2);
   };
 
   const handleEditExpense = (exp: ExpenseItem) => {
@@ -106,12 +136,16 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
     setExpenses(expenses.filter(exp => exp.id !== id));
   };
 
-  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+  const currentMonthPrefix = `${currentMonthDate.getFullYear()}-${String(currentMonthDate.getMonth() + 1).padStart(2, '0')}`;
+  const filteredExpenses = expenses.filter(exp => exp.date.startsWith(currentMonthPrefix));
+
+  const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
   const totalIncome = users.reduce((sum, u) => sum + u.income, 0);
   const balance = totalIncome - totalExpenses;
+  const progressPercent = totalIncome > 0 ? Math.min((totalExpenses / totalIncome) * 100, 100) : 0;
 
   // Group by category for summary
-  const summaryByCategory = expenses.reduce((acc, exp) => {
+  const summaryByCategory = filteredExpenses.reduce((acc, exp) => {
     acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
     return acc;
   }, {} as Record<string, number>);
@@ -139,7 +173,19 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
         
         {/* Total Summary */}
         <section className="bg-indigo-600 p-6 rounded-2xl shadow-md text-white">
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center justify-between mb-6 pb-4 border-b border-indigo-500/50">
+            <button onClick={() => setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1))} className="p-1 hover:bg-indigo-500 rounded-lg transition-colors">
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            <span className="font-semibold text-lg tracking-wide capitalize">
+              {currentMonthDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+            </span>
+            <button onClick={() => setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1))} className="p-1 hover:bg-indigo-500 rounded-lg transition-colors">
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          </div>
+
+          <div className="flex justify-between items-center mb-5">
             <div className="flex flex-col">
               <span className="text-indigo-200 text-sm font-medium">Saldo Restante</span>
               <span className={`text-3xl font-bold ${balance < 0 ? 'text-red-300' : 'text-white'}`}>
@@ -151,7 +197,7 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
             </div>
           </div>
           
-          <div className="flex gap-4">
+          <div className="flex gap-4 mb-4">
             <div className="flex-1 bg-indigo-500/30 rounded-xl p-3 border border-indigo-400/30">
               <div className="flex items-center gap-1 text-indigo-200 mb-1 text-xs">
                 <TrendingUp className="w-3 h-3" /> Renda
@@ -166,6 +212,21 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
             </div>
           </div>
           
+          {totalIncome > 0 && (
+            <div className="mt-2 bg-indigo-700/30 p-3 rounded-xl border border-indigo-500/30">
+              <div className="flex justify-between text-xs text-indigo-100 mb-2 font-medium">
+                <span>Renda Comprometida</span>
+                <span>{progressPercent.toFixed(1)}%</span>
+              </div>
+              <div className="w-full bg-indigo-900/50 rounded-full h-2.5 overflow-hidden">
+                <div 
+                  className={`h-full rounded-full transition-all duration-500 ${progressPercent > 90 ? 'bg-red-400' : progressPercent > 75 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {users.length === 0 && (
              <p className="text-xs text-indigo-200 mt-4 text-center bg-indigo-700/50 p-2 rounded-lg border border-indigo-500/50">
                Adicione participantes na aba "Participantes" para compor a renda.
@@ -280,6 +341,53 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
               </div>
             </div>
 
+            {!editingId && selectedTags.includes('Cartão de Crédito') && (
+              <div className="bg-indigo-50/50 p-4 rounded-lg border border-indigo-100 mb-3 space-y-3">
+                <span className="text-xs font-bold text-indigo-800 uppercase block tracking-wide">Pagamento Cartão</span>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="paymentType" 
+                      value="vista" 
+                      checked={paymentType === 'vista'} 
+                      onChange={() => setPaymentType('vista')}
+                      className="text-indigo-600 focus:ring-indigo-500"
+                    />
+                    À Vista
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="paymentType" 
+                      value="parcelado" 
+                      checked={paymentType === 'parcelado'} 
+                      onChange={() => setPaymentType('parcelado')}
+                      className="text-indigo-600 focus:ring-indigo-500"
+                    />
+                    Parcelado
+                  </label>
+                </div>
+                
+                {paymentType === 'parcelado' && (
+                  <div className="flex items-center gap-3 pt-2">
+                    <span className="text-sm text-slate-600">Parcelas:</span>
+                    <input 
+                      type="number" 
+                      min="2" 
+                      max="72"
+                      value={installmentsCount}
+                      onChange={(e) => setInstallmentsCount(Number(e.target.value))}
+                      className="w-20 px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                      {installmentsCount}x de R$ {newAmount ? (Number(newAmount) / (installmentsCount || 1)).toFixed(2) : '0.00'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex gap-2 pt-2">
               {editingId && (
                 <button
@@ -307,17 +415,18 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
         <section>
           <div className="flex justify-between items-end mb-3 px-1">
             <h2 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Histórico</h2>
-            <span className="text-xs text-slate-400">{expenses.length} {expenses.length === 1 ? 'registro' : 'registros'}</span>
+            <span className="text-xs text-slate-400">{filteredExpenses.length} {filteredExpenses.length === 1 ? 'registro' : 'registros'}</span>
           </div>
           
-          {expenses.length === 0 ? (
+          {filteredExpenses.length === 0 ? (
             <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100 text-center text-slate-400">
               <Wallet className="w-12 h-12 mx-auto mb-3 opacity-20 text-indigo-400" />
               <p>Nenhuma despesa registrada.</p>
+              <p className="text-sm mt-1">Os gastos deste mês aparecerão aqui.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {expenses.map(exp => (
+              {filteredExpenses.map(exp => (
                 <div key={exp.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between group hover:shadow-md transition-all">
                   <div className="flex flex-col">
                     <span className="font-semibold text-slate-800">{exp.description}</span>
