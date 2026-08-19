@@ -1,0 +1,6 @@
+{
+  "name": "Lista de Compras Econômica",
+  "description": "Crie sua lista de compras e use inteligência artificial para comparar preços e descobrir a loja mais barata.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
