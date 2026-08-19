@@ -8,6 +8,17 @@ import ShoppingList from './components/ShoppingList';
 import ListManager from './components/ListManager';
 import { ShoppingItem, ShoppingListModel } from './types';
 
+const DEFAULT_CATEGORIES = [
+  'Alimentos Básicos',
+  'Açougue & Peixaria',
+  'Frios & Laticínios',
+  'Hortifruti',
+  'Bebidas',
+  'Limpeza',
+  'Higiene Pessoal',
+  'Outros'
+];
+
 export default function App() {
   const [lists, setLists] = useState<ShoppingListModel[]>(() => {
     const saved = localStorage.getItem('shopping-lists-v2');
@@ -28,12 +39,21 @@ export default function App() {
     }
     return [];
   });
+
+  const [categories, setCategories] = useState<string[]>(() => {
+    const saved = localStorage.getItem('shopping-categories');
+    return saved ? JSON.parse(saved) : DEFAULT_CATEGORIES;
+  });
   
   const [activeListId, setActiveListId] = useState<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem('shopping-lists-v2', JSON.stringify(lists));
   }, [lists]);
+
+  useEffect(() => {
+    localStorage.setItem('shopping-categories', JSON.stringify(categories));
+  }, [categories]);
 
   const handleCreateList = (name: string) => {
     const newList: ShoppingListModel = {
@@ -85,6 +105,8 @@ export default function App() {
       setItems={handleUpdateItems} 
       onBack={() => setActiveListId(null)}
       onRename={handleRenameList}
+      categories={categories}
+      setCategories={setCategories}
     />
   );
 }

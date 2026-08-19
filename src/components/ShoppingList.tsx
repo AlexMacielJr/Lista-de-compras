@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, ShoppingCart, Loader2, Sparkles, ChevronRight, Calculator, ArrowLeft, Tag, Edit2, Check, X, CheckCircle2, Circle } from 'lucide-react';
+import { Plus, Trash2, ShoppingCart, Loader2, Sparkles, ChevronRight, Calculator, ArrowLeft, Tag, Edit2, Check, X, CheckCircle2, Circle, Settings2 } from 'lucide-react';
 import { ShoppingItem, AIAnalysisResult } from '../types';
 
 interface ShoppingListProps {
@@ -8,24 +8,17 @@ interface ShoppingListProps {
   setItems: (items: ShoppingItem[]) => void;
   onBack: () => void;
   onRename: (newName: string) => void;
+  categories: string[];
+  setCategories: (cats: string[]) => void;
 }
 
-const CATEGORIES = [
-  'Alimentos Básicos',
-  'Açougue & Peixaria',
-  'Frios & Laticínios',
-  'Hortifruti',
-  'Bebidas',
-  'Limpeza',
-  'Higiene Pessoal',
-  'Outros'
-];
-
-export default function ShoppingList({ listName, items, setItems, onBack, onRename }: ShoppingListProps) {
+export default function ShoppingList({ listName, items, setItems, onBack, onRename, categories, setCategories }: ShoppingListProps) {
   const [newItemName, setNewItemName] = useState('');
-  const [newItemCategory, setNewItemCategory] = useState(CATEGORIES[0]);
+  const [newItemCategory, setNewItemCategory] = useState(categories[0] || 'Outros');
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState(listName);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
 
   const handleRenameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,6 +68,24 @@ export default function ShoppingList({ listName, items, setItems, onBack, onRena
     }));
   };
 
+  const handleAddCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+    if (categories.includes(newCategoryName.trim())) {
+      setNewCategoryName('');
+      return;
+    }
+    setCategories([...categories, newCategoryName.trim()]);
+    setNewCategoryName('');
+  };
+
+  const handleDeleteCategory = (catToDelete: string) => {
+    setCategories(categories.filter(c => c !== catToDelete));
+    if (newItemCategory === catToDelete) {
+      setNewItemCategory(categories.find(c => c !== catToDelete) || 'Outros');
+    }
+  };
+
   const totalSpent = items.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)), 0);
 
   // Group items by category
@@ -86,9 +97,9 @@ export default function ShoppingList({ listName, items, setItems, onBack, onRena
   }, {} as Record<string, ShoppingItem[]>);
 
   // Sort categories according to our predefined list, followed by any custom ones
-  const activeCategories = CATEGORIES.filter(c => groupedItems[c]);
+  const activeCategories = categories.filter(c => groupedItems[c]);
   Object.keys(groupedItems).forEach(c => {
-    if (!CATEGORIES.includes(c) && !activeCategories.includes(c)) {
+    if (!categories.includes(c) && !activeCategories.includes(c)) {
       activeCategories.push(c);
     }
   });
@@ -163,10 +174,18 @@ export default function ShoppingList({ listName, items, setItems, onBack, onRena
                 onChange={(e) => setNewItemCategory(e.target.value)}
                 className="flex-1 bg-transparent text-sm text-slate-700 focus:outline-none appearance-none"
               >
-                {CATEGORIES.map(cat => (
+                {categories.map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
               </select>
+              <button 
+                type="button" 
+                onClick={() => setShowCategoryModal(true)}
+                className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600 transition-colors"
+                title="Editar categorias"
+              >
+                <Settings2 className="w-4 h-4" />
+              </button>
             </div>
           </form>
         </section>
@@ -267,6 +286,55 @@ export default function ShoppingList({ listName, items, setItems, onBack, onRena
           </section>
         )}
       </main>
+
+      {/* Modal de Categorias */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h2 className="font-semibold text-slate-800">Gerenciar Categorias</h2>
+              <button onClick={() => setShowCategoryModal(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-4 overflow-y-auto flex-1 space-y-2">
+              {categories.map(cat => (
+                <div key={cat} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                  <span className="text-slate-700 font-medium">{cat}</span>
+                  <button 
+                    onClick={() => handleDeleteCategory(cat)}
+                    className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              {categories.length === 0 && (
+                <p className="text-center text-slate-400 text-sm py-4">Nenhuma categoria cadastrada.</p>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 bg-slate-50">
+              <form onSubmit={handleAddCategory} className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Nova categoria..."
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                <button
+                  type="submit"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  Adicionar
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
