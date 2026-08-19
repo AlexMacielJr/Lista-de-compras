@@ -1,6 +1,6 @@
 {
-  "name": "Lista de Compras Econômica",
-  "description": "Crie sua lista de compras e use inteligência artificial para comparar preços e descobrir a loja mais barata.",
+  "name": "Gestor Familiar",
+  "description": "Gerenciador completo de listas de compras, finanças, gastos mensais e participantes.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
