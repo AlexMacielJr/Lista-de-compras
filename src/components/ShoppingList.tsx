@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, ShoppingCart, Loader2, Sparkles, ChevronRight, Calculator, ArrowLeft, Tag, Edit2, Check, X } from 'lucide-react';
+import { Plus, Trash2, ShoppingCart, Loader2, Sparkles, ChevronRight, Calculator, ArrowLeft, Tag, Edit2, Check, X, CheckCircle2, Circle } from 'lucide-react';
 import { ShoppingItem, AIAnalysisResult } from '../types';
 
 interface ShoppingListProps {
@@ -55,6 +55,12 @@ export default function ShoppingList({ listName, items, setItems, onBack, onRena
 
   const handleRemoveItem = (id: string) => {
     setItems(items.filter(item => item.id !== id));
+  };
+
+  const toggleItemCheck = (id: string) => {
+    setItems(items.map(item =>
+      item.id === id ? { ...item, checked: !item.checked } : item
+    ));
   };
 
   const updateItem = (id: string, field: 'quantity' | 'unitPrice', value: string) => {
@@ -190,15 +196,25 @@ export default function ShoppingList({ listName, items, setItems, onBack, onRena
                   </div>
                   
                   {groupedItems[category].map(item => (
-                    <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col gap-3 transition-all hover:shadow-md">
+                    <div key={item.id} className={`p-4 rounded-xl shadow-sm border flex flex-col gap-3 transition-all hover:shadow-md ${item.checked ? 'bg-slate-50/50 border-emerald-200/50 opacity-80' : 'bg-white border-slate-100'}`}>
                       <div className="flex justify-between items-start">
-                        <h3 className="font-medium text-slate-800 text-lg">{item.name}</h3>
+                        <div className="flex items-center gap-3">
+                          <button 
+                            onClick={() => toggleItemCheck(item.id)} 
+                            className={`transition-colors ${item.checked ? 'text-emerald-500' : 'text-slate-300 hover:text-emerald-400'}`}
+                          >
+                            {item.checked ? <CheckCircle2 className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
+                          </button>
+                          <h3 className={`font-medium text-lg transition-all ${item.checked ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                            {item.name}
+                          </h3>
+                        </div>
                         <button onClick={() => handleRemoveItem(item.id)} className="p-1 text-slate-300 hover:text-red-500 transition-colors">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                       
-                      <div className="flex gap-3 items-center bg-slate-50 p-2 rounded-lg border border-slate-100">
+                      <div className={`flex gap-3 items-center p-2 rounded-lg border ${item.checked ? 'bg-transparent border-transparent' : 'bg-slate-50 border-slate-100'}`}>
                         <div className="flex flex-col w-20">
                           <label className="text-[10px] uppercase font-semibold text-slate-400 mb-1 ml-1">Qtd</label>
                           <input

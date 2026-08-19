@@ -4,6 +4,7 @@ export interface ShoppingItem {
   quantity: number;
   unitPrice: number;
   category?: string;
+  checked?: boolean;
 }
 
 export interface ShoppingListModel {
