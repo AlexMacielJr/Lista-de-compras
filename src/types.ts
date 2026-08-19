@@ -14,6 +14,28 @@ export interface ShoppingListModel {
   createdAt: number;
 }
 
+export interface ExpenseItem {
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+  category: string;
+  tags?: string[];
+  paidBy?: string;
+}
+
+export interface HouseholdUser {
+  id: string;
+  name: string;
+  income: number;
+}
+
+export interface MonthlyExpenseModel {
+  id: string;
+  monthYear: string; // e.g. "2023-10"
+  expenses: ExpenseItem[];
+}
+
 export interface AIAnalysisResult {
   suggestedStore: string;
   reasoning: string;

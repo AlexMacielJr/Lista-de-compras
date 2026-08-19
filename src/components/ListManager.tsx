@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, ShoppingBag, ChevronRight, Calendar } from 'lucide-react';
+import { Plus, Trash2, ShoppingBag, ChevronRight, Calendar, ArrowLeft } from 'lucide-react';
 import { ShoppingListModel } from '../types';
 
 interface ListManagerProps {
@@ -7,9 +7,10 @@ interface ListManagerProps {
   onCreateList: (name: string) => void;
   onSelectList: (id: string) => void;
   onDeleteList: (id: string) => void;
+  onBack: () => void;
 }
 
-export default function ListManager({ lists, onCreateList, onSelectList, onDeleteList }: ListManagerProps) {
+export default function ListManager({ lists, onCreateList, onSelectList, onDeleteList, onBack }: ListManagerProps) {
   const [newListName, setNewListName] = useState('');
 
   const handleCreate = (e: React.FormEvent) => {
@@ -21,9 +22,14 @@ export default function ListManager({ lists, onCreateList, onSelectList, onDelet
 
   return (
     <div className="flex flex-col h-full bg-slate-50 min-h-screen">
-      <header className="bg-emerald-600 text-white p-4 shadow-md sticky top-0 z-10 flex items-center justify-center">
-        <ShoppingBag className="w-6 h-6 mr-2" />
-        <h1 className="text-xl font-semibold tracking-wide">Minhas Listas</h1>
+      <header className="bg-emerald-600 text-white p-4 shadow-md sticky top-0 z-10 flex items-center justify-between gap-2">
+        <button onClick={onBack} className="p-1 hover:bg-emerald-700 rounded-lg transition-colors flex items-center justify-center flex-shrink-0">
+          <ArrowLeft className="w-6 h-6" />
+        </button>
+        <div className="flex-1 flex items-center justify-center -ml-8">
+          <ShoppingBag className="w-6 h-6 mr-2" />
+          <h1 className="text-xl font-semibold tracking-wide">Minhas Listas</h1>
+        </div>
       </header>
 
       <main className="flex-1 overflow-y-auto p-4 max-w-lg w-full mx-auto space-y-6">
