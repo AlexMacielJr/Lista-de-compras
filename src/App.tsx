@@ -52,6 +52,41 @@ export default function App() {
   const [currentRoute, setCurrentRoute] = useState<'home' | 'shopping' | 'expenses' | 'users'>('home');
 
   useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (!hash || hash === 'home') {
+        setCurrentRoute('home');
+        setActiveListId(null);
+      } else if (hash.startsWith('shopping/')) {
+        setCurrentRoute('shopping');
+        setActiveListId(hash.split('/')[1]);
+      } else if (hash === 'shopping') {
+        setCurrentRoute('shopping');
+        setActiveListId(null);
+      } else if (hash === 'expenses') {
+        setCurrentRoute('expenses');
+        setActiveListId(null);
+      } else if (hash === 'users') {
+        setCurrentRoute('users');
+        setActiveListId(null);
+      }
+    };
+
+    if (!window.location.hash) {
+      window.location.hash = 'home';
+    } else {
+      handleHashChange();
+    }
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const navigate = (route: string) => {
+    window.location.hash = route;
+  };
+
+  useEffect(() => {
     localStorage.setItem('shopping-lists-v2', JSON.stringify(lists));
   }, [lists]);
 
@@ -67,18 +102,18 @@ export default function App() {
       createdAt: Date.now()
     };
     setLists([newList, ...lists]);
-    setActiveListId(newList.id);
+    navigate(`shopping/${newList.id}`);
   };
 
   const handleDeleteList = (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir esta lista?')) {
       setLists(lists.filter(l => l.id !== id));
-      if (activeListId === id) setActiveListId(null);
+      if (activeListId === id) navigate('shopping');
     }
   };
 
   const handleSelectList = (id: string) => {
-    setActiveListId(id);
+    navigate(`shopping/${id}`);
   };
 
   const activeList = lists.find(l => l.id === activeListId);
@@ -101,7 +136,7 @@ export default function App() {
           </div>
 
           <button 
-            onClick={() => setCurrentRoute('shopping')}
+            onClick={() => navigate('shopping')}
             className="w-full max-w-sm bg-white p-5 rounded-2xl shadow-sm border border-emerald-100 hover:shadow-md hover:border-emerald-300 transition-all flex items-center gap-5 group"
           >
             <div className="bg-emerald-100 p-4 rounded-full text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
@@ -115,7 +150,7 @@ export default function App() {
           </button>
 
           <button 
-            onClick={() => setCurrentRoute('expenses')}
+            onClick={() => navigate('expenses')}
             className="w-full max-w-sm bg-white p-5 rounded-2xl shadow-sm border border-indigo-100 hover:shadow-md hover:border-indigo-300 transition-all flex items-center gap-5 group"
           >
             <div className="bg-indigo-100 p-4 rounded-full text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
@@ -129,7 +164,7 @@ export default function App() {
           </button>
 
           <button 
-            onClick={() => setCurrentRoute('users')}
+            onClick={() => navigate('users')}
             className="w-full max-w-sm bg-white p-5 rounded-2xl shadow-sm border border-sky-100 hover:shadow-md hover:border-sky-300 transition-all flex items-center gap-5 group"
           >
             <div className="bg-sky-100 p-4 rounded-full text-sky-600 group-hover:bg-sky-600 group-hover:text-white transition-colors">
@@ -146,11 +181,11 @@ export default function App() {
     }
 
     if (currentRoute === 'expenses') {
-      return <MonthlyExpenses onBack={() => setCurrentRoute('home')} />;
+      return <MonthlyExpenses onBack={() => navigate('home')} />;
     }
 
     if (currentRoute === 'users') {
-      return <HouseholdUsers onBack={() => setCurrentRoute('home')} />;
+      return <HouseholdUsers onBack={() => navigate('home')} />;
     }
 
     if (!activeListId || !activeList) {
@@ -160,7 +195,7 @@ export default function App() {
           onCreateList={handleCreateList} 
           onSelectList={handleSelectList} 
           onDeleteList={handleDeleteList} 
-          onBack={() => setCurrentRoute('home')}
+          onBack={() => navigate('home')}
         />
       );
     }
@@ -170,7 +205,7 @@ export default function App() {
         listName={activeList.name}
         items={activeList.items} 
         setItems={handleUpdateItems} 
-        onBack={() => setActiveListId(null)}
+        onBack={() => navigate('shopping')}
         onRename={handleRenameList}
         categories={categories}
         setCategories={setCategories}
