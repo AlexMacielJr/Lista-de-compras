@@ -17,6 +17,8 @@ import { useCollectionData } from 'react-firebase-hooks/firestore';
 import { collection, query, where, doc, setDoc, deleteDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
 
+import { Toaster } from 'react-hot-toast';
+
 function WeeklyTip() {
   const [tip, setTip] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -175,6 +177,19 @@ export default function App() {
     navigate(`shopping/${id}`);
   };
 
+  const handleImportList = async (name: string, items: ShoppingItem[]) => {
+    const id = crypto.randomUUID();
+    const newList: ShoppingListModel & { householdId: string } = {
+      id,
+      householdId: householdId!,
+      name,
+      items,
+      createdAt: Date.now()
+    };
+    await setDoc(doc(db, 'shoppingLists', id), newList);
+    navigate(`shopping/${id}`);
+  };
+
   const handleDeleteList = async (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir esta lista?')) {
       await deleteDoc(doc(db, 'shoppingLists', id));
@@ -266,6 +281,7 @@ export default function App() {
         <ListManager 
           lists={lists} 
           onCreateList={handleCreateList} 
+          onImportList={handleImportList}
           onSelectList={handleSelectList} 
           onDeleteList={handleDeleteList} 
           onBack={() => navigate('home')}
@@ -288,6 +304,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
+      <Toaster position="top-center" />
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       <div className="flex-1 overflow-hidden">
         {renderContent()}

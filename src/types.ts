@@ -32,6 +32,12 @@ export interface HouseholdUser {
   id: string;
   name: string;
   income: number;
+  notificationPreferences?: {
+    enabled: boolean;
+    onAdd: boolean;
+    onUpdate: boolean;
+    onDelete: boolean;
+  };
 }
 
 export interface MonthlyExpenseModel {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Wallet, Tag, Calculator, Calendar, ArrowLeft, User, TrendingUp, TrendingDown, Edit2, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import toast from 'react-hot-toast';
 import { ExpenseItem, HouseholdUser } from '../types';
 import { useHousehold } from '../contexts/HouseholdContext';
 import { useCollectionData } from 'react-firebase-hooks/firestore';
@@ -31,7 +32,7 @@ interface MonthlyExpensesProps {
 }
 
 export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
-  const { householdId } = useHousehold();
+  const { householdId, user } = useHousehold();
 
   const [expensesData] = useCollectionData(
     query(collection(db, 'expenses'), where('householdId', '==', householdId))
@@ -42,6 +43,14 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
     query(collection(db, 'participants'), where('householdId', '==', householdId))
   );
   const users = (usersData as HouseholdUser[]) || [];
+  
+  const currentUserParticipant = users.find(p => p.id === user?.uid);
+  const prefs = currentUserParticipant?.notificationPreferences || {
+    enabled: true,
+    onAdd: true,
+    onUpdate: true,
+    onDelete: true
+  };
 
   const [categories, setCategories] = useState<string[]>(() => {
     const saved = localStorage.getItem('gestor_expense_categories');
@@ -97,69 +106,83 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
     e.preventDefault();
     if (!newDesc.trim() || !newAmount) return;
 
-    if (editingId) {
-      await updateDoc(doc(db, 'expenses', editingId), {
-        description: newDesc.trim(),
-        amount: Number(newAmount),
-        category: newCategory,
-        tags: selectedTags,
-        paidBy: newPaidBy || null,
-        jointPayment: isJointPayment
-      });
-      setEditingId(null);
-    } else {
-      if (selectedTags.includes('Cartão de Crédito') && paymentType === 'parcelado') {
-        const numInst = Math.max(2, installmentsCount);
-        const instAmount = installmentAmountType === 'total' ? Number(newAmount) / numInst : Number(newAmount);
-        const totalPurchAmount = installmentAmountType === 'total' ? Number(newAmount) : Number(newAmount) * numInst;
-        
-        const today = new Date();
-        
-        for (let i = 0; i < numInst; i++) {
-          const d = new Date(today.getFullYear(), today.getMonth() + i, today.getDate());
-          const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    try {
+      if (editingId) {
+        await updateDoc(doc(db, 'expenses', editingId), {
+          description: newDesc.trim(),
+          amount: Number(newAmount),
+          category: newCategory,
+          tags: selectedTags,
+          paidBy: newPaidBy || null,
+          jointPayment: isJointPayment
+        });
+        setEditingId(null);
+        if (prefs.enabled && prefs.onUpdate) {
+          toast.success('Gasto atualizado com sucesso!');
+        }
+      } else {
+        if (selectedTags.includes('Cartão de Crédito') && paymentType === 'parcelado') {
+          const numInst = Math.max(2, installmentsCount);
+          const instAmount = installmentAmountType === 'total' ? Number(newAmount) / numInst : Number(newAmount);
+          const totalPurchAmount = installmentAmountType === 'total' ? Number(newAmount) : Number(newAmount) * numInst;
+          
+          const today = new Date();
+          
+          for (let i = 0; i < numInst; i++) {
+            const d = new Date(today.getFullYear(), today.getMonth() + i, today.getDate());
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            
+            const newExpId = crypto.randomUUID();
+            await setDoc(doc(db, 'expenses', newExpId), {
+              id: newExpId,
+              householdId: householdId!,
+              description: newDesc.trim(),
+              amount: instAmount,
+              date: dateStr,
+              category: newCategory,
+              tags: selectedTags,
+              paidBy: newPaidBy || null,
+              jointPayment: isJointPayment,
+              totalAmount: totalPurchAmount,
+              installmentIndex: i + 1,
+              installmentsCount: numInst
+            });
+          }
+          if (prefs.enabled && prefs.onAdd) {
+            toast.success(`Compra parcelada em ${numInst}x salva!`);
+          }
+        } else {
+          const today = new Date();
+          const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
           
           const newExpId = crypto.randomUUID();
           await setDoc(doc(db, 'expenses', newExpId), {
             id: newExpId,
             householdId: householdId!,
             description: newDesc.trim(),
-            amount: instAmount,
+            amount: Number(newAmount),
             date: dateStr,
             category: newCategory,
             tags: selectedTags,
             paidBy: newPaidBy || null,
-            jointPayment: isJointPayment,
-            totalAmount: totalPurchAmount,
-            installmentIndex: i + 1,
-            installmentsCount: numInst
+            jointPayment: isJointPayment
           });
+          if (prefs.enabled && prefs.onAdd) {
+            toast.success('Gasto salvo com sucesso!');
+          }
         }
-      } else {
-        const today = new Date();
-        const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-        
-        const newExpId = crypto.randomUUID();
-        await setDoc(doc(db, 'expenses', newExpId), {
-          id: newExpId,
-          householdId: householdId!,
-          description: newDesc.trim(),
-          amount: Number(newAmount),
-          date: dateStr,
-          category: newCategory,
-          tags: selectedTags,
-          paidBy: newPaidBy || null,
-          jointPayment: isJointPayment
-        });
       }
-    }
 
-    setNewDesc('');
-    setNewAmount('');
-    setSelectedTags([]);
-    setPaymentType('vista');
-    setInstallmentsCount(2);
-    setIsJointPayment(true);
+      setNewDesc('');
+      setNewAmount('');
+      setSelectedTags([]);
+      setPaymentType('vista');
+      setInstallmentsCount(2);
+      setIsJointPayment(true);
+    } catch (error) {
+      toast.error('Erro ao salvar gasto. Tente novamente.');
+      console.error(error);
+    }
   };
 
   const handleEditExpense = (exp: ExpenseItem) => {
@@ -183,7 +206,14 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
 
   const handleRemoveExpense = async (id: string) => {
     if(id.startsWith('virtual-')) return; // Can't remove projected averages this way
-    await deleteDoc(doc(db, 'expenses', id));
+    try {
+      await deleteDoc(doc(db, 'expenses', id));
+      if (prefs.enabled && prefs.onDelete) {
+        toast.success('Gasto removido!');
+      }
+    } catch (error) {
+      toast.error('Erro ao remover gasto.');
+    }
   };
 
   const currentMonthPrefix = `${currentMonthDate.getFullYear()}-${String(currentMonthDate.getMonth() + 1).padStart(2, '0')}`;

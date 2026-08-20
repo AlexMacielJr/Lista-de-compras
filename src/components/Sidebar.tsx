@@ -23,11 +23,20 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const otherParticipants = participants.filter(p => p.id !== user?.uid);
 
   const [income, setIncome] = useState<string>('');
+  const [prefs, setPrefs] = useState({
+    enabled: true,
+    onAdd: true,
+    onUpdate: true,
+    onDelete: true,
+  });
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (currentUserParticipant) {
       setIncome(currentUserParticipant.income.toString());
+      if (currentUserParticipant.notificationPreferences) {
+        setPrefs(currentUserParticipant.notificationPreferences);
+      }
     }
   }, [currentUserParticipant]);
 
@@ -41,6 +50,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         householdId,
         name: user.displayName || user.email || 'Usuário',
         income: Number(income) || 0,
+        notificationPreferences: prefs
       }, { merge: true });
     } catch (error) {
       console.error("Error saving profile", error);
@@ -98,12 +108,38 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none"
               />
             </div>
+            
+            <div className="pt-2 border-t border-slate-200 mt-4 space-y-2">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Notificações de Gastos</label>
+              <label className="flex items-center space-x-2">
+                <input type="checkbox" checked={prefs.enabled} onChange={e => setPrefs({...prefs, enabled: e.target.checked})} className="rounded text-sky-600 focus:ring-sky-500 w-4 h-4"/>
+                <span className="text-sm text-slate-700">Ativar Notificações</span>
+              </label>
+
+              {prefs.enabled && (
+                <div className="pl-6 space-y-2 mt-2">
+                  <label className="flex items-center space-x-2">
+                    <input type="checkbox" checked={prefs.onAdd} onChange={e => setPrefs({...prefs, onAdd: e.target.checked})} className="rounded text-sky-600 focus:ring-sky-500 w-4 h-4"/>
+                    <span className="text-sm text-slate-600">Ao registrar gastos</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input type="checkbox" checked={prefs.onUpdate} onChange={e => setPrefs({...prefs, onUpdate: e.target.checked})} className="rounded text-sky-600 focus:ring-sky-500 w-4 h-4"/>
+                    <span className="text-sm text-slate-600">Ao editar gastos</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input type="checkbox" checked={prefs.onDelete} onChange={e => setPrefs({...prefs, onDelete: e.target.checked})} className="rounded text-sky-600 focus:ring-sky-500 w-4 h-4"/>
+                    <span className="text-sm text-slate-600">Ao excluir gastos</span>
+                  </label>
+                </div>
+              )}
+            </div>
+
             <button 
               onClick={handleSaveProfile}
               disabled={isSaving}
-              className="w-full bg-sky-600 hover:bg-sky-700 text-white font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
+              className="w-full bg-sky-600 hover:bg-sky-700 text-white font-medium py-2 rounded-lg transition-colors disabled:opacity-50 mt-4"
             >
-              {isSaving ? 'Salvando...' : 'Salvar Renda'}
+              {isSaving ? 'Salvando...' : 'Salvar Preferências'}
             </button>
           </div>
 
