@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Wallet, ChevronRight, Users, LogOut } from 'lucide-react';
+import { ShoppingCart, Wallet, ChevronRight, Users, LogOut, Lightbulb, RefreshCw } from 'lucide-react';
 import ShoppingList from './components/ShoppingList';
 import ListManager from './components/ListManager';
 import MonthlyExpenses from './components/MonthlyExpenses';
@@ -15,6 +15,67 @@ import { useHousehold } from './contexts/HouseholdContext';
 import { useCollectionData } from 'react-firebase-hooks/firestore';
 import { collection, query, where, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
+
+function WeeklyTip() {
+  const [tip, setTip] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTip = async () => {
+      try {
+        const cachedTip = localStorage.getItem('weeklyTip');
+        const cachedDate = localStorage.getItem('weeklyTipDate');
+        
+        // Refresh tip if it's older than 7 days
+        const isFresh = cachedDate && (Date.now() - parseInt(cachedDate) < 7 * 24 * 60 * 60 * 1000);
+        
+        if (cachedTip && isFresh) {
+          setTip(cachedTip);
+          setLoading(false);
+          return;
+        }
+
+        const res = await fetch('/api/tips/weekly');
+        const data = await res.json();
+        
+        if (data.tip) {
+          setTip(data.tip);
+          localStorage.setItem('weeklyTip', data.tip);
+          localStorage.setItem('weeklyTipDate', Date.now().toString());
+        }
+      } catch (error) {
+        console.error('Error fetching weekly tip:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchTip();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="w-full max-w-sm mt-4 bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-2xl shadow-sm border border-amber-100 flex items-start gap-3">
+        <RefreshCw className="w-6 h-6 text-amber-500 animate-spin flex-shrink-0" />
+        <div className="text-sm text-amber-800 animate-pulse">Gerando dica inteligente de economia...</div>
+      </div>
+    );
+  }
+
+  if (!tip) return null;
+
+  return (
+    <div className="w-full max-w-sm mt-4 bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-2xl shadow-sm border border-amber-100 flex items-start gap-3">
+      <div className="bg-white p-2 rounded-full shadow-sm">
+        <Lightbulb className="w-5 h-5 text-amber-500 flex-shrink-0" />
+      </div>
+      <div>
+        <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">Dica Inteligente</h3>
+        <p className="text-sm text-amber-900 leading-relaxed">{tip}</p>
+      </div>
+    </div>
+  );
+}
 
 const DEFAULT_CATEGORIES = [
   'Alimentos Básicos',
@@ -174,6 +235,8 @@ export default function App() {
             </div>
             <ChevronRight className="w-6 h-6 text-slate-300 group-hover:text-sky-500" />
           </button>
+
+          <WeeklyTip />
 
           <button 
             onClick={logout}

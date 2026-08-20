@@ -10,6 +10,38 @@ async function startServer() {
   app.use(express.json());
 
   // API Routes
+  app.get('/api/tips/weekly', async (req, res) => {
+    try {
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: 'GEMINI_API_KEY não configurada.' });
+      }
+
+      const ai = new GoogleGenAI({ 
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.7-flash",
+        contents: "Gere uma dica curta, prática e criativa de economia doméstica focada em gestão familiar ou hábitos de compra no mercado. A dica deve ser útil para o dia a dia e ter no máximo 2 ou 3 frases curtas. Não use jargões difíceis.",
+        config: {
+          systemInstruction: "Você é um assistente financeiro especialista em economia doméstica e compras de mercado. Dê dicas curtas e muito práticas.",
+        }
+      });
+
+      const tipText = response.text || "Planeje suas refeições da semana antes de ir ao mercado para evitar comprar itens desnecessários por impulso.";
+      
+      res.json({ tip: tipText });
+    } catch (error: any) {
+      console.error('Error fetching weekly tip from Gemini:', error);
+      res.status(500).json({ error: error.message || 'Erro ao gerar dica semanal.' });
+    }
+  });
+
   app.post('/api/analyze-list', async (req, res) => {
     try {
       const { items } = req.body;
