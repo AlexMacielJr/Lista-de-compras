@@ -22,6 +22,7 @@ export interface ExpenseItem {
   category: string;
   tags?: string[];
   paidBy?: string;
+  jointPayment?: boolean;
   totalAmount?: number;
   installmentIndex?: number;
   installmentsCount?: number;

@@ -80,7 +80,13 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
           <h1 className="text-2xl font-bold text-slate-800 mb-2">Login Seguro</h1>
           <p className="text-slate-500 mb-6 text-sm">Faça login para salvar e sincronizar seus gastos com sua família.</p>
           <button 
-            onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
+            onClick={async () => {
+              try {
+                await signInWithPopup(auth, new GoogleAuthProvider());
+              } catch (error: any) {
+                alert("Erro ao fazer login: " + error.message + "\n\nSe você estiver na Vercel, não esqueça de adicionar o domínio na aba 'Domínios Autorizados' do Firebase Console.");
+              }
+            }}
             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl transition-colors"
           >
             Entrar com Google

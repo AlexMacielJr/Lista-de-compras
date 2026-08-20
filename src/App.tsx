@@ -174,6 +174,14 @@ export default function App() {
             </div>
             <ChevronRight className="w-6 h-6 text-slate-300 group-hover:text-sky-500" />
           </button>
+
+          <button 
+            onClick={logout}
+            className="w-full max-w-sm mt-4 bg-white p-4 rounded-2xl shadow-sm border border-red-100 hover:shadow-md hover:bg-red-50 transition-all flex items-center justify-center gap-2 text-red-500 hover:text-red-600"
+          >
+            <LogOut className="w-5 h-5" />
+            <span className="font-semibold">Sair do Sistema</span>
+          </button>
         </div>
       );
     }

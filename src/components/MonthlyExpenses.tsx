@@ -53,6 +53,7 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
   const [newCategory, setNewCategory] = useState(categories[0]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [newPaidBy, setNewPaidBy] = useState(users.length > 0 ? users[0].name : '');
+  const [isJointPayment, setIsJointPayment] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   
   const [currentMonthDate, setCurrentMonthDate] = useState(() => new Date());
@@ -102,7 +103,8 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
         amount: Number(newAmount),
         category: newCategory,
         tags: selectedTags,
-        paidBy: newPaidBy || null
+        paidBy: newPaidBy || null,
+        jointPayment: isJointPayment
       });
       setEditingId(null);
     } else {
@@ -127,6 +129,7 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
             category: newCategory,
             tags: selectedTags,
             paidBy: newPaidBy || null,
+            jointPayment: isJointPayment,
             totalAmount: totalPurchAmount,
             installmentIndex: i + 1,
             installmentsCount: numInst
@@ -145,7 +148,8 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
           date: dateStr,
           category: newCategory,
           tags: selectedTags,
-          paidBy: newPaidBy || null
+          paidBy: newPaidBy || null,
+          jointPayment: isJointPayment
         });
       }
     }
@@ -155,6 +159,7 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
     setSelectedTags([]);
     setPaymentType('vista');
     setInstallmentsCount(2);
+    setIsJointPayment(true);
   };
 
   const handleEditExpense = (exp: ExpenseItem) => {
@@ -164,6 +169,7 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
     setNewCategory(exp.category);
     setSelectedTags(exp.tags || []);
     setNewPaidBy(exp.paidBy || '');
+    setIsJointPayment(exp.jointPayment !== false); // Default true if undefined
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -172,6 +178,7 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
     setNewDesc('');
     setNewAmount('');
     setSelectedTags([]);
+    setIsJointPayment(true);
   };
 
   const handleRemoveExpense = async (id: string) => {
@@ -253,6 +260,33 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
     name,
     value
   })).sort((a, b) => (b.value as number) - (a.value as number));
+
+  const numUsers = users.length || 1;
+  const userBalances = users.map(user => {
+    let totalPaid = 0;
+    let totalCost = 0;
+
+    filteredExpenses.forEach(exp => {
+      if (exp.paidBy === user.name) {
+        totalPaid += exp.amount;
+      }
+
+      if (exp.jointPayment !== false) {
+        totalCost += exp.amount / numUsers;
+      } else {
+        if (exp.paidBy === user.name) {
+          totalCost += exp.amount;
+        }
+      }
+    });
+
+    return {
+      name: user.name,
+      totalPaid,
+      totalCost,
+      balance: totalPaid - totalCost
+    };
+  });
 
   const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9', '#ec4899', '#64748b'];
 
@@ -373,6 +407,29 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
           </section>
         )}
 
+        {/* Resumo por Pessoa */}
+        {users.length > 0 && filteredExpenses.length > 0 && (
+          <section className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+            <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Resumo por Pessoa</h3>
+            <div className="space-y-3">
+              {userBalances.map(ub => (
+                <div key={ub.name} className="flex flex-col p-3 bg-slate-50 rounded-lg border border-slate-100 text-sm">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-semibold text-slate-800">{ub.name}</span>
+                    <span className={`font-bold ${ub.balance > 0 ? 'text-emerald-600' : ub.balance < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                      {ub.balance > 0 ? `Recebe R$ ${ub.balance.toFixed(2)}` : ub.balance < 0 ? `Deve R$ ${Math.abs(ub.balance).toFixed(2)}` : 'R$ 0.00'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>Pagou: R$ {ub.totalPaid.toFixed(2)}</span>
+                    <span>Sua Parte: R$ {ub.totalCost.toFixed(2)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Form */}
         <section className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
           <div className="flex items-center gap-2 mb-3 text-slate-700">
@@ -421,18 +478,32 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
             </div>
 
             {users.length > 0 && (
-              <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
-                <User className="w-4 h-4 text-indigo-600 flex-shrink-0" />
-                <select
-                  value={newPaidBy}
-                  onChange={(e) => setNewPaidBy(e.target.value)}
-                  className="flex-1 bg-transparent text-sm text-slate-700 focus:outline-none appearance-none"
-                >
-                  <option value="">Quem pagou? (Opcional)</option>
-                  {users.map(u => (
-                    <option key={u.id} value={u.name}>{u.name}</option>
-                  ))}
-                </select>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                  <User className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                  <select
+                    value={newPaidBy}
+                    onChange={(e) => setNewPaidBy(e.target.value)}
+                    className="flex-1 bg-transparent text-sm text-slate-700 focus:outline-none appearance-none"
+                  >
+                    <option value="">Quem pagou? (Opcional)</option>
+                    {users.map(u => (
+                      <option key={u.id} value={u.name}>{u.name}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                {newPaidBy && (
+                  <label className="flex items-center gap-2 cursor-pointer bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                    <input
+                      type="checkbox"
+                      checked={isJointPayment}
+                      onChange={(e) => setIsJointPayment(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm text-slate-700">Pagamento em conjunto (dividir custo)</span>
+                  </label>
+                )}
               </div>
             )}
             
@@ -591,7 +662,7 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
                         <span>{new Date(exp.date).toLocaleDateString()}</span>
                         {exp.paidBy && (
                           <span className="flex items-center gap-1 bg-sky-50 text-sky-700 px-2 py-0.5 rounded border border-sky-100 font-medium">
-                            <User className="w-3 h-3" /> {exp.paidBy}
+                            <User className="w-3 h-3" /> {exp.paidBy} {exp.jointPayment !== false ? '(Conjunto)' : '(Individual)'}
                           </span>
                         )}
                       </div>
