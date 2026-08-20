@@ -1,0 +1,56 @@
+{
+  "collections": {
+    "households": {
+      "description": "Represents a shared household account",
+      "fields": {
+        "id": "string",
+        "name": "string",
+        "members": "array of strings (user UIDs)"
+      }
+    },
+    "expenses": {
+      "description": "Monthly expenses, tied to a household",
+      "fields": {
+        "id": "string",
+        "householdId": "string",
+        "description": "string",
+        "amount": "number",
+        "date": "string",
+        "category": "string",
+        "tags": "array of strings",
+        "paidBy": "string",
+        "totalAmount": "number",
+        "installmentIndex": "number",
+        "installmentsCount": "number"
+      }
+    },
+    "shoppingLists": {
+      "description": "Shopping lists for a household",
+      "fields": {
+        "id": "string",
+        "householdId": "string",
+        "name": "string",
+        "items": "array of objects",
+        "createdAt": "number"
+      }
+    },
+    "participants": {
+      "description": "Participants in the household (for the UI list)",
+      "fields": {
+        "id": "string",
+        "householdId": "string",
+        "name": "string",
+        "income": "number"
+      }
+    },
+    "settings": {
+      "description": "Household settings like custom categories",
+      "fields": {
+        "id": "string",
+        "householdId": "string",
+        "expenseCategories": "array of strings",
+        "shoppingCategories": "array of strings"
+      }
+    }
+  }
+}

@@ -4,12 +4,17 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Wallet, ChevronRight, Users } from 'lucide-react';
+import { ShoppingCart, Wallet, ChevronRight, Users, LogOut } from 'lucide-react';
 import ShoppingList from './components/ShoppingList';
 import ListManager from './components/ListManager';
 import MonthlyExpenses from './components/MonthlyExpenses';
 import HouseholdUsers from './components/HouseholdUsers';
 import { ShoppingItem, ShoppingListModel } from './types';
+import { useHousehold } from './contexts/HouseholdContext';
+
+import { useCollectionData } from 'react-firebase-hooks/firestore';
+import { collection, query, where, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { db } from './lib/firebase';
 
 const DEFAULT_CATEGORIES = [
   'Alimentos Básicos',
@@ -23,25 +28,12 @@ const DEFAULT_CATEGORIES = [
 ];
 
 export default function App() {
-  const [lists, setLists] = useState<ShoppingListModel[]>(() => {
-    const saved = localStorage.getItem('shopping-lists-v2');
-    if (saved) return JSON.parse(saved);
-    
-    // Migrate old list if exists
-    const oldSaved = localStorage.getItem('shopping-list');
-    if (oldSaved) {
-      const oldItems = JSON.parse(oldSaved);
-      if (oldItems && oldItems.length > 0) {
-        return [{
-          id: crypto.randomUUID(),
-          name: 'Lista Antiga',
-          items: oldItems,
-          createdAt: Date.now()
-        }];
-      }
-    }
-    return [];
-  });
+  const { householdId, logout } = useHousehold();
+  
+  const [listsData, listsLoading] = useCollectionData(
+    query(collection(db, 'shoppingLists'), where('householdId', '==', householdId))
+  );
+  const lists = (listsData as ShoppingListModel[]) || [];
 
   const [categories, setCategories] = useState<string[]>(() => {
     const saved = localStorage.getItem('shopping-categories');
@@ -87,27 +79,25 @@ export default function App() {
   };
 
   useEffect(() => {
-    localStorage.setItem('shopping-lists-v2', JSON.stringify(lists));
-  }, [lists]);
-
-  useEffect(() => {
     localStorage.setItem('shopping-categories', JSON.stringify(categories));
   }, [categories]);
 
-  const handleCreateList = (name: string) => {
-    const newList: ShoppingListModel = {
-      id: crypto.randomUUID(),
+  const handleCreateList = async (name: string) => {
+    const id = crypto.randomUUID();
+    const newList: ShoppingListModel & { householdId: string } = {
+      id,
+      householdId: householdId!,
       name,
       items: [],
       createdAt: Date.now()
     };
-    setLists([newList, ...lists]);
-    navigate(`shopping/${newList.id}`);
+    await setDoc(doc(db, 'shoppingLists', id), newList);
+    navigate(`shopping/${id}`);
   };
 
-  const handleDeleteList = (id: string) => {
+  const handleDeleteList = async (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir esta lista?')) {
-      setLists(lists.filter(l => l.id !== id));
+      await deleteDoc(doc(db, 'shoppingLists', id));
       if (activeListId === id) navigate('shopping');
     }
   };
@@ -118,12 +108,14 @@ export default function App() {
 
   const activeList = lists.find(l => l.id === activeListId);
 
-  const handleUpdateItems = (newItems: ShoppingItem[]) => {
-    setLists(lists.map(l => l.id === activeListId ? { ...l, items: newItems } : l));
+  const handleUpdateItems = async (newItems: ShoppingItem[]) => {
+    if (!activeListId) return;
+    await updateDoc(doc(db, 'shoppingLists', activeListId), { items: newItems });
   };
 
-  const handleRenameList = (newName: string) => {
-    setLists(lists.map(l => l.id === activeListId ? { ...l, name: newName } : l));
+  const handleRenameList = async (newName: string) => {
+    if (!activeListId) return;
+    await updateDoc(doc(db, 'shoppingLists', activeListId), { name: newName });
   };
 
   const renderContent = () => {
@@ -133,6 +125,12 @@ export default function App() {
           <div className="text-center mb-6">
             <h1 className="text-3xl font-bold text-slate-800">Bem-vindo</h1>
             <p className="text-slate-500 mt-2">O que você deseja gerenciar hoje?</p>
+            {householdId && (
+              <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 rounded-lg max-w-sm mx-auto text-sm">
+                <span className="text-indigo-600 block mb-1 font-medium">Seu Código de Compartilhamento (Família):</span>
+                <span className="font-mono bg-white px-2 py-1 rounded border border-indigo-200 select-all font-bold tracking-wide">{householdId}</span>
+              </div>
+            )}
           </div>
 
           <button 

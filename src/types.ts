@@ -22,6 +22,9 @@ export interface ExpenseItem {
   category: string;
   tags?: string[];
   paidBy?: string;
+  totalAmount?: number;
+  installmentIndex?: number;
+  installmentsCount?: number;
 }
 
 export interface HouseholdUser {

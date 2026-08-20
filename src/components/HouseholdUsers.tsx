@@ -1,41 +1,45 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Plus, Trash2, ArrowLeft, Users, DollarSign, UserPlus } from 'lucide-react';
 import { HouseholdUser } from '../types';
+import { useHousehold } from '../contexts/HouseholdContext';
+import { useCollectionData } from 'react-firebase-hooks/firestore';
+import { collection, query, where, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 interface HouseholdUsersProps {
   onBack: () => void;
 }
 
 export default function HouseholdUsers({ onBack }: HouseholdUsersProps) {
-  const [users, setUsers] = useState<HouseholdUser[]>(() => {
-    const saved = localStorage.getItem('household-users');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const { householdId } = useHousehold();
+  
+  const [usersData] = useCollectionData(
+    query(collection(db, 'participants'), where('householdId', '==', householdId))
+  );
+  const users = (usersData as HouseholdUser[]) || [];
 
   const [newName, setNewName] = useState('');
   const [newIncome, setNewIncome] = useState('');
 
-  useEffect(() => {
-    localStorage.setItem('household-users', JSON.stringify(users));
-  }, [users]);
-
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim() || !newIncome) return;
 
-    const newUser: HouseholdUser = {
-      id: crypto.randomUUID(),
+    const id = crypto.randomUUID();
+    const newUser = {
+      id,
+      householdId: householdId!,
       name: newName.trim(),
       income: Number(newIncome)
     };
 
-    setUsers([...users, newUser]);
+    await setDoc(doc(db, 'participants', id), newUser);
     setNewName('');
     setNewIncome('');
   };
 
-  const handleRemoveUser = (id: string) => {
-    setUsers(users.filter(u => u.id !== id));
+  const handleRemoveUser = async (id: string) => {
+    await deleteDoc(doc(db, 'participants', id));
   };
 
   const totalIncome = users.reduce((sum, u) => sum + u.income, 0);
