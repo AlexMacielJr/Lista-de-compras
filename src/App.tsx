@@ -4,16 +4,17 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Wallet, ChevronRight, Users, LogOut, Lightbulb, RefreshCw } from 'lucide-react';
+import { ShoppingCart, Wallet, ChevronRight, Users, LogOut, Lightbulb, RefreshCw, Menu } from 'lucide-react';
 import ShoppingList from './components/ShoppingList';
 import ListManager from './components/ListManager';
 import MonthlyExpenses from './components/MonthlyExpenses';
 import HouseholdUsers from './components/HouseholdUsers';
+import Sidebar from './components/Sidebar';
 import { ShoppingItem, ShoppingListModel } from './types';
 import { useHousehold } from './contexts/HouseholdContext';
 
 import { useCollectionData } from 'react-firebase-hooks/firestore';
-import { collection, query, where, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, doc, setDoc, deleteDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
 
 function WeeklyTip() {
@@ -89,7 +90,7 @@ const DEFAULT_CATEGORIES = [
 ];
 
 export default function App() {
-  const { householdId, logout } = useHousehold();
+  const { householdId, logout, user } = useHousehold();
   
   const [listsData, listsLoading] = useCollectionData(
     query(collection(db, 'shoppingLists'), where('householdId', '==', householdId))
@@ -103,6 +104,24 @@ export default function App() {
   
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const [currentRoute, setCurrentRoute] = useState<'home' | 'shopping' | 'expenses' | 'users'>('home');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (user && householdId) {
+      const checkProfile = async () => {
+        try {
+          const docRef = doc(db, 'participants', user.uid);
+          const docSnap = await getDoc(docRef);
+          if (!docSnap.exists() || !docSnap.data().income) {
+            setIsSidebarOpen(true);
+          }
+        } catch (error) {
+          console.error("Error checking user profile:", error);
+        }
+      };
+      checkProfile();
+    }
+  }, [user, householdId]);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -182,7 +201,14 @@ export default function App() {
   const renderContent = () => {
     if (currentRoute === 'home') {
       return (
-        <div className="flex flex-col h-full bg-slate-50 items-center justify-center p-6 space-y-4">
+        <div className="flex flex-col h-full bg-slate-50 items-center justify-center p-6 space-y-4 relative">
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="absolute top-6 left-6 p-2 bg-white rounded-xl shadow-sm border border-slate-200 hover:bg-slate-50 transition-colors text-slate-600"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+
           <div className="text-center mb-6">
             <h1 className="text-3xl font-bold text-slate-800">Bem-vindo</h1>
             <p className="text-slate-500 mt-2">O que você deseja gerenciar hoje?</p>
@@ -222,29 +248,7 @@ export default function App() {
             <ChevronRight className="w-6 h-6 text-slate-300 group-hover:text-indigo-500" />
           </button>
 
-          <button 
-            onClick={() => navigate('users')}
-            className="w-full max-w-sm bg-white p-5 rounded-2xl shadow-sm border border-sky-100 hover:shadow-md hover:border-sky-300 transition-all flex items-center gap-5 group"
-          >
-            <div className="bg-sky-100 p-4 rounded-full text-sky-600 group-hover:bg-sky-600 group-hover:text-white transition-colors">
-              <Users className="w-7 h-7" />
-            </div>
-            <div className="text-left flex-1">
-              <h2 className="text-xl font-bold text-slate-800">Participantes</h2>
-              <p className="text-sm text-slate-500 mt-1">Pessoas e rendas</p>
-            </div>
-            <ChevronRight className="w-6 h-6 text-slate-300 group-hover:text-sky-500" />
-          </button>
-
           <WeeklyTip />
-
-          <button 
-            onClick={logout}
-            className="w-full max-w-sm mt-4 bg-white p-4 rounded-2xl shadow-sm border border-red-100 hover:shadow-md hover:bg-red-50 transition-all flex items-center justify-center gap-2 text-red-500 hover:text-red-600"
-          >
-            <LogOut className="w-5 h-5" />
-            <span className="font-semibold">Sair do Sistema</span>
-          </button>
         </div>
       );
     }
@@ -284,6 +288,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       <div className="flex-1 overflow-hidden">
         {renderContent()}
       </div>

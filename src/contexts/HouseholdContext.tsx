@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../lib/firebase';
-import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signOut, User } from 'firebase/auth';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, arrayUnion } from 'firebase/firestore';
 
 interface HouseholdContextType {
@@ -9,6 +9,7 @@ interface HouseholdContextType {
   joinHousehold: (id: string) => Promise<void>;
   createHousehold: (name: string) => Promise<void>;
   logout: () => void;
+  user: User | null;
 }
 
 const HouseholdContext = createContext<HouseholdContextType | undefined>(undefined);
@@ -131,7 +132,7 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <HouseholdContext.Provider value={{ householdId, joinHousehold, createHousehold, logout }}>
+    <HouseholdContext.Provider value={{ householdId, joinHousehold, createHousehold, logout, user: user as User | null }}>
       {children}
     </HouseholdContext.Provider>
   );
