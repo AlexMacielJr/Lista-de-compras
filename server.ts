@@ -38,7 +38,15 @@ async function startServer() {
       res.json({ tip: tipText });
     } catch (error: any) {
       console.error('Error fetching weekly tip from Gemini:', error);
-      res.status(500).json({ error: error.message || 'Erro ao gerar dica semanal.' });
+      // Fallback em caso de falha da API (ex: limite de uso excedido 429)
+      const fallbackTips = [
+        "Planeje suas refeições da semana antes de ir ao mercado para evitar comprar itens desnecessários por impulso.",
+        "Não vá ao mercado com fome! Isso ajuda a evitar compras de produtos que você não planejava levar.",
+        "Acompanhe pequenos gastos. Aquele café diário pode não parecer muito, mas soma um valor considerável no fim do mês.",
+        "Compare o preço por quilo ou litro dos produtos para ter certeza de qual embalagem realmente vale mais a pena."
+      ];
+      const randomTip = fallbackTips[Math.floor(Math.random() * fallbackTips.length)];
+      res.json({ tip: randomTip, isFallback: true });
     }
   });
 
