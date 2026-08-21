@@ -54,12 +54,15 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
 
   // Auto-migrate "Fixo" to "Variável"
   useEffect(() => {
-    const expensesToMigrate = expenses.filter(exp => exp.tags?.includes('Fixo'));
+    const expensesToMigrate = expenses.filter(exp => exp.tags?.includes('Fixo') || (exp.tags && new Set(exp.tags).size !== exp.tags.length));
     if (expensesToMigrate.length > 0) {
       expensesToMigrate.forEach(async (exp) => {
         try {
-          const newTags = exp.tags!.map(t => t === 'Fixo' ? 'Variável' : t);
-          await updateDoc(doc(db, 'expenses', exp.id), { tags: newTags });
+          const newTags = Array.from(new Set(exp.tags!.map(t => t === 'Fixo' ? 'Variável' : t)));
+          // Only update if there's an actual change in the tags
+          if (JSON.stringify(newTags) !== JSON.stringify(exp.tags)) {
+             await updateDoc(doc(db, 'expenses', exp.id), { tags: newTags });
+          }
         } catch (error) {
           console.error('Error migrating Fixo to Variável:', error);
         }
@@ -745,8 +748,8 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
                       </div>
                       {exp.tags && exp.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
-                          {exp.tags.map(tag => (
-                            <span key={tag} className="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-600 font-medium border border-slate-200">
+                          {exp.tags.map((tag, i) => (
+                            <span key={`${tag}-${i}`} className="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-600 font-medium border border-slate-200">
                               {tag}
                             </span>
                           ))}
