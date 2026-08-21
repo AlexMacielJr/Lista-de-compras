@@ -101,6 +101,66 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [editCategoryInputValue, setEditCategoryInputValue] = useState('');
 
+  const [isScanning, setIsScanning] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleScanReceipt = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsScanning(true);
+    const toastId = toast.loading('Lendo nota com IA...');
+
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64data = reader.result?.toString().split(',')[1];
+        if (!base64data) {
+          setIsScanning(false);
+          toast.error("Erro ao converter imagem", { id: toastId });
+          return;
+        }
+
+        try {
+          const response = await fetch('/api/read-receipt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              image: base64data,
+              mimeType: file.type
+            })
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.error || 'Falha na análise');
+          }
+          
+          if (data.description) setNewDesc(data.description);
+          if (data.amount) setNewAmount(data.amount.toString());
+          if (data.category && categories.includes(data.category)) {
+            setNewCategory(data.category);
+          } else {
+            setNewCategory(categories.includes('Outros') ? 'Outros' : categories[0]);
+          }
+
+          toast.success('Nota lida com sucesso!', { id: toastId });
+        } catch (err: any) {
+          toast.error(err.message || 'Não foi possível ler a nota.', { id: toastId, duration: 5000 });
+        } finally {
+          setIsScanning(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error(error);
+      setIsScanning(false);
+      toast.error('Ocorreu um erro inesperado.', { id: toastId });
+    }
+  };
+
   useEffect(() => {
     localStorage.setItem('gestor_expense_categories', JSON.stringify(categories));
   }, [categories]);
@@ -604,9 +664,32 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
 
         {/* Form */}
         <section id="expense-form" className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex items-center gap-2 mb-3 text-slate-700">
-            {editingId ? <Edit2 className="w-5 h-5 text-emerald-500" /> : <Plus className="w-5 h-5 text-indigo-500" />}
-            <h2 className="font-semibold">{editingId ? 'Editar Despesa' : 'Nova Despesa'}</h2>
+          <div className="flex items-center justify-between mb-3 text-slate-700">
+            <div className="flex items-center gap-2">
+              {editingId ? <Edit2 className="w-5 h-5 text-emerald-500" /> : <Plus className="w-5 h-5 text-indigo-500" />}
+              <h2 className="font-semibold">{editingId ? 'Editar Despesa' : 'Nova Despesa'}</h2>
+            </div>
+            {!editingId && (
+              <div>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  capture="environment"
+                  className="hidden" 
+                  ref={fileInputRef}
+                  onChange={handleScanReceipt}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isScanning}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors disabled:opacity-50"
+                >
+                  <Camera className="w-3 h-3" />
+                  {isScanning ? 'Lendo...' : 'Ler Nota (IA)'}
+                </button>
+              </div>
+            )}
           </div>
           <form onSubmit={handleSaveExpense} className="space-y-3">
             <input

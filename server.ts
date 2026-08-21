@@ -13,7 +13,7 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
 
   // API Routes
   app.post('/api/notify', async (req, res) => {
@@ -109,6 +109,49 @@ async function startServer() {
       ];
       const randomTip = fallbackTips[Math.floor(Math.random() * fallbackTips.length)];
       res.json({ tip: randomTip, isFallback: true });
+    }
+  });
+
+  app.post('/api/read-receipt', async (req, res) => {
+    try {
+      const { image, mimeType } = req.body;
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: 'GEMINI_API_KEY não configurada.' });
+      }
+      if (!image || !mimeType) {
+        return res.status(400).json({ error: 'Imagem não fornecida.' });
+      }
+
+      const ai = new GoogleGenAI({ 
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: [
+          "Analise este comprovante/nota fiscal e extraia os seguintes dados em JSON puro, sem formatação markdown: { \"description\": \"(nome do estabelecimento ou tipo de compra, ex: 'Supermercado X', 'Conta de Luz')\", \"amount\": (valor total numérico), \"date\": \"(data no formato YYYY-MM-DD, se não encontrar tente omitir ou retorne vazio)\", \"category\": \"(sugira uma categoria dentre: Moradia, Alimentação, Transporte, Saúde, Lazer, Educação, Outros)\" }",
+          {
+            inlineData: {
+              data: image,
+              mimeType
+            }
+          }
+        ],
+        config: {
+          responseMimeType: "application/json"
+        }
+      });
+
+      const data = JSON.parse(response.text || '{}');
+      res.json(data);
+    } catch (error: any) {
+      console.error('Error reading receipt:', error);
+      res.status(500).json({ error: error.message || 'Erro ao analisar o comprovante.' });
     }
   });
 
