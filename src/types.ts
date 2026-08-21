@@ -26,6 +26,7 @@ export interface ExpenseItem {
   totalAmount?: number;
   installmentIndex?: number;
   installmentsCount?: number;
+  receiptUrl?: string;
 }
 
 export interface HouseholdUser {

@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Wallet, Tag, Calculator, Calendar, ArrowLeft, User, TrendingUp, TrendingDown, Edit2, X, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Trash2, Wallet, Tag, Calculator, Calendar, ArrowLeft, User, TrendingUp, TrendingDown, Edit2, X, ChevronLeft, ChevronRight, Check, Download, Share2, Link as LinkIcon, Camera } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import toast from 'react-hot-toast';
+import html2canvas from 'html2canvas';
 import { ExpenseItem, HouseholdUser } from '../types';
 import { useHousehold } from '../contexts/HouseholdContext';
 import { useCollectionData } from 'react-firebase-hooks/firestore';
 import { collection, query, where, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { notifyUsers } from '../lib/notify';
+import TrendsChart from './TrendsChart';
 
 const DEFAULT_EXPENSE_CATEGORIES = [
   'Moradia',
@@ -81,7 +83,10 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [newPaidBy, setNewPaidBy] = useState(users.length > 0 ? users[0].name : '');
   const [isJointPayment, setIsJointPayment] = useState(true);
+  const [newReceiptUrl, setNewReceiptUrl] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+  
+  const summaryRef = useRef<HTMLDivElement>(null);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('');
@@ -177,7 +182,8 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
           category: newCategory,
           tags: selectedTags,
           paidBy: newPaidBy || null,
-          jointPayment: isJointPayment
+          jointPayment: isJointPayment,
+          receiptUrl: newReceiptUrl.trim() || null
         });
         setEditingId(null);
         if (prefs.enabled && prefs.onUpdate) {
@@ -208,7 +214,8 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
               jointPayment: isJointPayment,
               totalAmount: totalPurchAmount,
               installmentIndex: i + 1,
-              installmentsCount: numInst
+              installmentsCount: numInst,
+              receiptUrl: newReceiptUrl.trim() || null
             });
           }
           if (prefs.enabled && prefs.onAdd) {
@@ -228,7 +235,8 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
             category: newCategory,
             tags: selectedTags,
             paidBy: newPaidBy || null,
-            jointPayment: isJointPayment
+            jointPayment: isJointPayment,
+            receiptUrl: newReceiptUrl.trim() || null
           });
           if (prefs.enabled && prefs.onAdd) {
             toast.success('Gasto salvo com sucesso!');
@@ -251,6 +259,7 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
       setPaymentType('vista');
       setInstallmentsCount(2);
       setIsJointPayment(true);
+      setNewReceiptUrl('');
     } catch (error) {
       toast.error('Erro ao salvar gasto. Tente novamente.');
       console.error(error);
@@ -258,6 +267,7 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
   };
 
   const handleEditExpense = (exp: ExpenseItem) => {
+    if(exp.id.startsWith('virtual-')) return;
     setEditingId(exp.id);
     setNewDesc(exp.description);
     setNewAmount(exp.amount.toString());
@@ -265,6 +275,7 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
     setSelectedTags(exp.tags || []);
     setNewPaidBy(exp.paidBy || '');
     setIsJointPayment(exp.jointPayment !== false); // Default true if undefined
+    setNewReceiptUrl(exp.receiptUrl || '');
     document.getElementById('expense-form')?.scrollIntoView({ behavior: 'smooth' });
   };
 
@@ -274,6 +285,7 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
     setNewAmount('');
     setSelectedTags([]);
     setIsJointPayment(true);
+    setNewReceiptUrl('');
   };
 
   const handleRemoveExpense = async (id: string) => {
@@ -292,7 +304,50 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
   // Filter expenses by the current month
   const physicalExpensesThisMonth = expenses.filter(exp => exp.date.startsWith(currentMonthPrefix));
   
-  const filteredExpenses = [...physicalExpensesThisMonth];
+  // Calculate projected recurring expenses ('Recorrente' / 'Variável')
+  const pastExpenses = expenses.filter(exp => exp.date.substring(0, 7) < currentMonthPrefix);
+  
+  const virtualExpenses: ExpenseItem[] = [];
+  const pastRecurringOrVariable = pastExpenses.filter(exp => exp.tags?.includes('Recorrente') || exp.tags?.includes('Variável'));
+  const groupsByDesc = new Map<string, { amounts: number[], latestExp: ExpenseItem }>();
+  
+  // Group by description (case-insensitive) to prevent duplication if both tags exist
+  [...pastRecurringOrVariable].sort((a, b) => a.date.localeCompare(b.date)).forEach(exp => {
+    const desc = exp.description.toLowerCase().trim();
+    if (!groupsByDesc.has(desc)) {
+      groupsByDesc.set(desc, { amounts: [], latestExp: exp });
+    }
+    groupsByDesc.get(desc)!.amounts.push(exp.amount);
+    groupsByDesc.get(desc)!.latestExp = exp;
+  });
+
+  const existsThisMonth = (desc: string) => physicalExpensesThisMonth.some(e => e.description.toLowerCase().trim() === desc);
+
+  for (const [descKey, group] of groupsByDesc.entries()) {
+    if (!existsThisMonth(descKey)) {
+      const { amounts, latestExp } = group;
+      const isVariable = latestExp.tags?.includes('Variável');
+      
+      let projectedAmount = latestExp.amount;
+      // If it's variable, we take the average of all past occurrences
+      if (isVariable && amounts.length > 0) {
+        projectedAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+      }
+      
+      // Ensure 'Projetado' tag exists and prevent tag duplicates
+      const finalTags = Array.from(new Set([...(latestExp.tags || []), 'Projetado']));
+
+      virtualExpenses.push({
+        ...latestExp,
+        id: `virtual-${latestExp.id}`,
+        amount: projectedAmount,
+        date: `${currentMonthPrefix}-01`,
+        tags: finalTags
+      });
+    }
+  }
+
+  const filteredExpenses = [...physicalExpensesThisMonth, ...virtualExpenses];
   
   const displayedExpenses = filteredExpenses.filter(exp => {
     const matchSearch = exp.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -469,9 +524,64 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
 
         {/* Resumo por Pessoa */}
         {users.length > 0 && filteredExpenses.length > 0 && (
-          <section className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Resumo por Pessoa</h3>
-            <div className="space-y-3">
+          <section className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 relative">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Resumo por Pessoa</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const monthName = currentMonthDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                    let text = `📊 *Fechamento: ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}*\n\n`;
+                    text += `Total Gasto: R$ ${totalExpenses.toFixed(2)}\n`;
+                    text += `Total Entradas: R$ ${totalIncome.toFixed(2)}\n\n`;
+                    userBalances.forEach(ub => {
+                      text += `👤 *${ub.name}*\n`;
+                      text += `Pagou: R$ ${ub.totalPaid.toFixed(2)} | Sua Parte: R$ ${ub.totalCost.toFixed(2)}\n`;
+                      if (ub.balance > 0) text += `👉 *Recebe: R$ ${ub.balance.toFixed(2)}*\n\n`;
+                      else if (ub.balance < 0) text += `👉 *Deve: R$ ${Math.abs(ub.balance).toFixed(2)}*\n\n`;
+                      else text += `👉 *Tudo certo!*\n\n`;
+                    });
+                    text += `_Gerado por Gestor_`;
+                    navigator.clipboard.writeText(text);
+                    toast.success('Resumo copiado para a área de transferência!');
+                  }}
+                  className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-1"
+                  title="Copiar Relatório WhatsApp"
+                >
+                  <Share2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={async () => {
+                    if (summaryRef.current) {
+                      try {
+                        const canvas = await html2canvas(summaryRef.current, { backgroundColor: '#ffffff', scale: 2 });
+                        const image = canvas.toDataURL("image/png");
+                        const link = document.createElement('a');
+                        link.href = image;
+                        link.download = `fechamento_${currentMonthPrefix}.png`;
+                        link.click();
+                        toast.success('Imagem baixada!');
+                      } catch (e) {
+                        toast.error('Erro ao gerar imagem.');
+                      }
+                    }
+                  }}
+                  className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-1"
+                  title="Baixar Imagem"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="space-y-3" ref={summaryRef}>
+              <div className="hidden print:block text-center mb-4">
+                <h2 className="text-xl font-bold text-slate-800">Fechamento do Mês</h2>
+                <p className="text-slate-500">{currentMonthDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</p>
+                <div className="flex justify-center gap-4 mt-2">
+                  <span className="text-sm">Total: R$ {totalExpenses.toFixed(2)}</span>
+                </div>
+              </div>
               {userBalances.map(ub => (
                 <div key={ub.name} className="flex flex-col p-3 bg-slate-50 rounded-lg border border-slate-100 text-sm">
                   <div className="flex justify-between items-center mb-1">
@@ -489,6 +599,8 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
             </div>
           </section>
         )}
+
+        <TrendsChart expenses={expenses} />
 
         {/* Form */}
         <section id="expense-form" className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
@@ -585,6 +697,19 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="pt-2 pb-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase mb-2 block flex items-center gap-1">
+                <LinkIcon className="w-3 h-3" /> Link do Comprovante (Opcional)
+              </span>
+              <input
+                type="url"
+                placeholder="https://..."
+                value={newReceiptUrl}
+                onChange={(e) => setNewReceiptUrl(e.target.value)}
+                className="w-full px-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-colors"
+              />
             </div>
 
             {!editingId && selectedTags.includes('Cartão de Crédito') && (
@@ -753,26 +878,60 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
                               {tag}
                             </span>
                           ))}
+                          {exp.receiptUrl && (
+                            <a href={exp.receiptUrl} target="_blank" rel="noopener noreferrer" className="bg-indigo-50 px-2 py-0.5 rounded text-[10px] text-indigo-600 font-medium border border-indigo-200 flex items-center gap-1 hover:bg-indigo-100">
+                              <LinkIcon className="w-3 h-3" /> Comprovante
+                            </a>
+                          )}
+                        </div>
+                      )}
+                      {(!exp.tags || exp.tags.length === 0) && exp.receiptUrl && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          <a href={exp.receiptUrl} target="_blank" rel="noopener noreferrer" className="bg-indigo-50 px-2 py-0.5 rounded text-[10px] text-indigo-600 font-medium border border-indigo-200 flex items-center gap-1 hover:bg-indigo-100">
+                            <LinkIcon className="w-3 h-3" /> Comprovante
+                          </a>
                         </div>
                       )}
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span className="font-bold text-slate-700 text-lg">R$ {exp.amount.toFixed(2)}</span>
                       <div className="flex items-center gap-1 mt-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
-                          onClick={() => handleEditExpense(exp)} 
-                          className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"
-                          aria-label="Editar despesa"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleRemoveExpense(exp.id)} 
-                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                          aria-label="Remover despesa"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {exp.id.startsWith('virtual-') ? (
+                          <button
+                            onClick={() => {
+                              setNewDesc(exp.description);
+                              setNewAmount(exp.amount.toString());
+                              setNewCategory(exp.category);
+                              setSelectedTags(exp.tags?.filter(t => t !== 'Projetado') || []);
+                              setNewPaidBy(exp.paidBy || (users.length > 0 ? users[0].name : ''));
+                              setIsJointPayment(exp.jointPayment !== false);
+                              setEditingId(null);
+                              document.getElementById('expense-form')?.scrollIntoView({ behavior: 'smooth' });
+                              toast('Confirme os dados e clique em Salvar.', { icon: '📝' });
+                            }}
+                            className="px-2 py-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-1"
+                            aria-label="Confirmar projeção"
+                          >
+                            <Check className="w-4 h-4" /> Efetivar
+                          </button>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={() => handleEditExpense(exp)} 
+                              className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"
+                              aria-label="Editar despesa"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleRemoveExpense(exp.id)} 
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              aria-label="Remover despesa"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
