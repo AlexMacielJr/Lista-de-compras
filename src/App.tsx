@@ -18,6 +18,8 @@ import { collection, query, where, doc, setDoc, deleteDoc, updateDoc, getDoc } f
 import { db } from './lib/firebase';
 
 import { Toaster } from 'react-hot-toast';
+import { notifyUsers } from './lib/notify';
+import toast from 'react-hot-toast';
 
 function WeeklyTip() {
   const [tip, setTip] = useState<string | null>(null);
@@ -98,6 +100,21 @@ export default function App() {
     query(collection(db, 'shoppingLists'), where('householdId', '==', householdId))
   );
   const lists = (listsData as ShoppingListModel[]) || [];
+
+  const [usersData] = useCollectionData(
+    query(collection(db, 'participants'), where('householdId', '==', householdId))
+  );
+  const participants = (usersData as any[]) || [];
+
+  const handleNotifyListUpdate = async (listName: string) => {
+    try {
+      const name = user?.displayName || user?.email || 'Usuário';
+      await notifyUsers('list_updated', participants as any, { userName: name, listName }, user?.uid);
+      toast.success('Notificação enviada para a casa!');
+    } catch (e) {
+      toast.error('Erro ao notificar a casa.');
+    }
+  };
 
   const [categories, setCategories] = useState<string[]>(() => {
     const saved = localStorage.getItem('shopping-categories');
@@ -298,6 +315,7 @@ export default function App() {
         onRename={handleRenameList}
         categories={categories}
         setCategories={setCategories}
+        onNotify={() => handleNotifyListUpdate(activeList.name)}
       />
     );
   };

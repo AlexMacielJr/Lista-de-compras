@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, ShoppingCart, Loader2, Sparkles, ChevronRight, Calculator, ArrowLeft, Tag, Edit2, Check, X, CheckCircle2, Circle, Settings2 } from 'lucide-react';
+import { Plus, Trash2, ShoppingCart, Loader2, Sparkles, ChevronRight, Calculator, ArrowLeft, Tag, Edit2, Check, X, CheckCircle2, Circle, Settings2, Mail } from 'lucide-react';
 import { ShoppingItem, AIAnalysisResult } from '../types';
 
 interface ShoppingListProps {
@@ -10,9 +10,10 @@ interface ShoppingListProps {
   onRename: (newName: string) => void;
   categories: string[];
   setCategories: (cats: string[]) => void;
+  onNotify?: () => void;
 }
 
-export default function ShoppingList({ listName, items, setItems, onBack, onRename, categories, setCategories }: ShoppingListProps) {
+export default function ShoppingList({ listName, items, setItems, onBack, onRename, categories, setCategories, onNotify }: ShoppingListProps) {
   const [newItemName, setNewItemName] = useState('');
   const [newItemCategory, setNewItemCategory] = useState(categories[0] || 'Outros');
   const [isEditingName, setIsEditingName] = useState(false);
@@ -142,7 +143,15 @@ export default function ShoppingList({ listName, items, setItems, onBack, onRena
           </div>
         )}
 
-        {!isEditingName && <div className="w-8 flex-shrink-0"></div>} {/* Placeholder para manter o título centralizado */}
+        {!isEditingName && (
+          <button 
+            onClick={onNotify}
+            className="p-1 hover:bg-emerald-700 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
+            title="Notificar Família"
+          >
+            <Mail className="w-6 h-6" />
+          </button>
+        )}
       </header>
 
       <main className="flex-1 overflow-y-auto p-4 max-w-lg w-full mx-auto space-y-6">

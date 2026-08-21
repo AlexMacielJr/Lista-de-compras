@@ -5,6 +5,7 @@ import { useCollectionData } from 'react-firebase-hooks/firestore';
 import { collection, query, where, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { HouseholdUser } from '../types';
+import { notifyUsers } from '../lib/notify';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -44,14 +45,22 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     if (!user || !householdId) return;
     setIsSaving(true);
     try {
+      const isNewUser = !currentUserParticipant;
       const participantRef = doc(db, 'participants', user.uid);
+      const name = user.displayName || user.email || 'Usuário';
+
       await setDoc(participantRef, {
         id: user.uid,
         householdId,
-        name: user.displayName || user.email || 'Usuário',
+        name,
+        email: user.email || '',
         income: Number(income) || 0,
         notificationPreferences: prefs
       }, { merge: true });
+
+      if (isNewUser) {
+        await notifyUsers('account_registered', participants, { userName: name }, user.uid);
+      }
     } catch (error) {
       console.error("Error saving profile", error);
     }

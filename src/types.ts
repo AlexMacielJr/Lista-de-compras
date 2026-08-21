@@ -32,6 +32,7 @@ export interface HouseholdUser {
   id: string;
   name: string;
   income: number;
+  email?: string;
   notificationPreferences?: {
     enabled: boolean;
     onAdd: boolean;

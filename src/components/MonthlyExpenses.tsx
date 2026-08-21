@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Wallet, Tag, Calculator, Calendar, ArrowLeft, User, TrendingUp, TrendingDown, Edit2, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Wallet, Tag, Calculator, Calendar, ArrowLeft, User, TrendingUp, TrendingDown, Edit2, X, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import toast from 'react-hot-toast';
 import { ExpenseItem, HouseholdUser } from '../types';
@@ -7,6 +7,7 @@ import { useHousehold } from '../contexts/HouseholdContext';
 import { useCollectionData } from 'react-firebase-hooks/firestore';
 import { collection, query, where, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { notifyUsers } from '../lib/notify';
 
 const DEFAULT_EXPENSE_CATEGORIES = [
   'Moradia',
@@ -23,7 +24,6 @@ const PREDEFINED_TAGS = [
   'Débito',
   'Pix',
   'Recorrente',
-  'Fixo',
   'Variável'
 ];
 
@@ -52,6 +52,21 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
     onDelete: true
   };
 
+  // Auto-migrate "Fixo" to "Variável"
+  useEffect(() => {
+    const expensesToMigrate = expenses.filter(exp => exp.tags?.includes('Fixo'));
+    if (expensesToMigrate.length > 0) {
+      expensesToMigrate.forEach(async (exp) => {
+        try {
+          const newTags = exp.tags!.map(t => t === 'Fixo' ? 'Variável' : t);
+          await updateDoc(doc(db, 'expenses', exp.id), { tags: newTags });
+        } catch (error) {
+          console.error('Error migrating Fixo to Variável:', error);
+        }
+      });
+    }
+  }, [expenses]);
+
   const [categories, setCategories] = useState<string[]>(() => {
     const saved = localStorage.getItem('gestor_expense_categories');
     return saved ? JSON.parse(saved) : DEFAULT_EXPENSE_CATEGORIES;
@@ -65,6 +80,9 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
   const [isJointPayment, setIsJointPayment] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategory, setFilterCategory] = useState<string>('');
+
   const [currentMonthDate, setCurrentMonthDate] = useState(() => new Date());
   const [paymentType, setPaymentType] = useState<'vista' | 'parcelado'>('vista');
   const [installmentsCount, setInstallmentsCount] = useState<number>(2);
@@ -72,6 +90,8 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
 
   const [isManagingCategories, setIsManagingCategories] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [editCategoryInputValue, setEditCategoryInputValue] = useState('');
 
   useEffect(() => {
     localStorage.setItem('gestor_expense_categories', JSON.stringify(categories));
@@ -99,6 +119,46 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
     setCategories(newCats);
     if (newCategory === cat) {
       setNewCategory(newCats[0] || '');
+    }
+  };
+
+  const handleEditCategorySubmit = async (oldCat: string) => {
+    const trimmed = editCategoryInputValue.trim();
+    if (!trimmed || trimmed === oldCat) {
+      setEditingCategory(null);
+      return;
+    }
+
+    if (categories.includes(trimmed)) {
+      toast.error('Categoria já existe!');
+      return;
+    }
+
+    const newCats = categories.map(c => c === oldCat ? trimmed : c);
+    setCategories(newCats);
+
+    if (newCategory === oldCat) {
+      setNewCategory(trimmed);
+    }
+    
+    if (filterCategory === oldCat) {
+      setFilterCategory(trimmed);
+    }
+
+    setEditingCategory(null);
+
+    try {
+      const expensesToUpdate = expenses.filter(e => e.category === oldCat);
+      const updatePromises = expensesToUpdate.map(exp => 
+        updateDoc(doc(db, 'expenses', exp.id), { category: trimmed })
+      );
+      await Promise.all(updatePromises);
+      if (expensesToUpdate.length > 0) {
+        toast.success(`Categoria atualizada em ${expensesToUpdate.length} ${expensesToUpdate.length === 1 ? 'gasto' : 'gastos'}.`);
+      }
+    } catch (error) {
+      toast.error('Erro ao atualizar gastos antigos.');
+      console.error(error);
     }
   };
 
@@ -171,6 +231,15 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
             toast.success('Gasto salvo com sucesso!');
           }
         }
+
+        // Notify others about the new expense
+        const name = currentUserParticipant?.name || user?.displayName || user?.email || 'Usuário';
+        await notifyUsers('expense_added', users, {
+          userName: name,
+          description: newDesc.trim(),
+          amount: Number(newAmount),
+          date: new Date().toLocaleDateString()
+        }, user?.uid);
       }
 
       setNewDesc('');
@@ -193,7 +262,7 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
     setSelectedTags(exp.tags || []);
     setNewPaidBy(exp.paidBy || '');
     setIsJointPayment(exp.jointPayment !== false); // Default true if undefined
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.getElementById('expense-form')?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const cancelEdit = () => {
@@ -205,7 +274,6 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
   };
 
   const handleRemoveExpense = async (id: string) => {
-    if(id.startsWith('virtual-')) return; // Can't remove projected averages this way
     try {
       await deleteDoc(doc(db, 'expenses', id));
       if (prefs.enabled && prefs.onDelete) {
@@ -218,58 +286,17 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
 
   const currentMonthPrefix = `${currentMonthDate.getFullYear()}-${String(currentMonthDate.getMonth() + 1).padStart(2, '0')}`;
   
-  // Calculate projected recurring expenses (Fixo / Variável)
+  // Filter expenses by the current month
   const physicalExpensesThisMonth = expenses.filter(exp => exp.date.startsWith(currentMonthPrefix));
-  const pastExpenses = expenses.filter(exp => exp.date.substring(0, 7) < currentMonthPrefix);
   
-  const virtualExpenses: ExpenseItem[] = [];
+  const filteredExpenses = [...physicalExpensesThisMonth];
   
-  // Fixo
-  const pastFixaExpenses = pastExpenses.filter(exp => exp.tags?.includes('Fixo'));
-  const fixaByDesc = new Map<string, ExpenseItem>();
-  [...pastFixaExpenses].sort((a, b) => a.date.localeCompare(b.date)).forEach(exp => {
-    fixaByDesc.set(exp.description, exp);
-  });
-  
-  // Variável (Average)
-  const pastVarExpenses = pastExpenses.filter(exp => exp.tags?.includes('Variável'));
-  const varAmountsByDesc = new Map<string, number[]>();
-  const varLatestByDesc = new Map<string, ExpenseItem>();
-  [...pastVarExpenses].sort((a, b) => a.date.localeCompare(b.date)).forEach(exp => {
-    if (!varAmountsByDesc.has(exp.description)) varAmountsByDesc.set(exp.description, []);
-    varAmountsByDesc.get(exp.description)!.push(exp.amount);
-    varLatestByDesc.set(exp.description, exp);
+  const displayedExpenses = filteredExpenses.filter(exp => {
+    const matchSearch = exp.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchCategory = filterCategory ? exp.category === filterCategory : true;
+    return matchSearch && matchCategory;
   });
 
-  const existsThisMonth = (desc: string) => physicalExpensesThisMonth.some(e => e.description === desc);
-
-  for (const [desc, latestExp] of fixaByDesc.entries()) {
-    if (!existsThisMonth(desc)) {
-      virtualExpenses.push({
-        ...latestExp,
-        id: `virtual-fixa-${desc}`,
-        date: `${currentMonthPrefix}-01`,
-        tags: [...(latestExp.tags || []), 'Projetado (Fixo)'].filter(t => t !== 'Fixo')
-      });
-    }
-  }
-
-  for (const [desc, amounts] of varAmountsByDesc.entries()) {
-    if (!existsThisMonth(desc)) {
-      const avg = amounts.reduce((a, b) => a + b, 0) / amounts.length;
-      const latestExp = varLatestByDesc.get(desc)!;
-      virtualExpenses.push({
-        ...latestExp,
-        id: `virtual-var-${desc}`,
-        amount: avg,
-        date: `${currentMonthPrefix}-01`,
-        tags: [...(latestExp.tags || []), 'Projetado (Média)'].filter(t => t !== 'Variável')
-      });
-    }
-  }
-
-  const filteredExpenses = [...physicalExpensesThisMonth, ...virtualExpenses];
-  
   // Exclude virtual ones from future installments calculation as they are not fixed installments
   const futureInstallmentsTotal = expenses
     .filter(exp => exp.date.substring(0, 7) > currentMonthPrefix)
@@ -461,7 +488,7 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
         )}
 
         {/* Form */}
-        <section className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+        <section id="expense-form" className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
           <div className="flex items-center gap-2 mb-3 text-slate-700">
             {editingId ? <Edit2 className="w-5 h-5 text-emerald-500" /> : <Plus className="w-5 h-5 text-indigo-500" />}
             <h2 className="font-semibold">{editingId ? 'Editar Despesa' : 'Nova Despesa'}</h2>
@@ -657,18 +684,38 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
         <section>
           <div className="flex justify-between items-end mb-3 px-1">
             <h2 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Histórico</h2>
-            <span className="text-xs text-slate-400">{filteredExpenses.length} {filteredExpenses.length === 1 ? 'registro' : 'registros'}</span>
+            <span className="text-xs text-slate-400">{displayedExpenses.length} {displayedExpenses.length === 1 ? 'registro' : 'registros'}</span>
           </div>
           
-          {filteredExpenses.length === 0 ? (
+          <div className="mb-4 flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              placeholder="Buscar por nome..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors text-sm"
+            />
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors text-sm"
+            >
+              <option value="">Todas as Categorias</option>
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          {displayedExpenses.length === 0 ? (
             <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100 text-center text-slate-400">
               <Wallet className="w-12 h-12 mx-auto mb-3 opacity-20 text-indigo-400" />
-              <p>Nenhuma despesa registrada.</p>
-              <p className="text-sm mt-1">Os gastos deste mês aparecerão aqui.</p>
+              <p>Nenhuma despesa encontrada.</p>
+              <p className="text-sm mt-1">Tente ajustar seus filtros ou adicione um gasto.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredExpenses.map(exp => (
+              {displayedExpenses.map(exp => (
                 <div key={exp.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col group hover:shadow-md transition-all">
                   <div className="flex items-start justify-between">
                     <div className="flex flex-col">
@@ -765,13 +812,51 @@ export default function MonthlyExpenses({ onBack }: MonthlyExpensesProps) {
               <div className="space-y-2">
                 {categories.map(cat => (
                   <div key={cat} className="flex justify-between items-center bg-slate-50 border border-slate-100 p-3 rounded-lg">
-                    <span className="text-sm font-medium text-slate-700">{cat}</span>
-                    <button 
-                      onClick={() => handleRemoveCategory(cat)}
-                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {editingCategory === cat ? (
+                      <div className="flex-1 flex items-center gap-2 mr-2">
+                        <input
+                          autoFocus
+                          type="text"
+                          value={editCategoryInputValue}
+                          onChange={(e) => setEditCategoryInputValue(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleEditCategorySubmit(cat)}
+                          className="flex-1 px-2 py-1 bg-white border border-slate-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <button
+                          onClick={() => handleEditCategorySubmit(cat)}
+                          className="p-1 text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setEditingCategory(null)}
+                          className="p-1 text-slate-400 hover:bg-slate-200 rounded transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-sm font-medium text-slate-700">{cat}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              setEditingCategory(cat);
+                              setEditCategoryInputValue(cat);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleRemoveCategory(cat)}
+                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>

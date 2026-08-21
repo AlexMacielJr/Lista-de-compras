@@ -2,6 +2,12 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
+import { Resend } from 'resend';
+
+let resend: Resend | null = null;
+if (process.env.RESEND_API_KEY) {
+  resend = new Resend(process.env.RESEND_API_KEY);
+}
 
 async function startServer() {
   const app = express();
@@ -10,6 +16,62 @@ async function startServer() {
   app.use(express.json());
 
   // API Routes
+  app.post('/api/notify', async (req, res) => {
+    try {
+      const { type, emails, data } = req.body;
+      
+      if (!resend) {
+        console.warn('RESEND_API_KEY not found. Email notification skipped.', req.body);
+        return res.status(200).json({ success: true, warning: 'RESEND_API_KEY not configured' });
+      }
+
+      if (!emails || !Array.isArray(emails) || emails.length === 0) {
+        return res.status(400).json({ error: 'Nenhum email destinatário fornecido.' });
+      }
+
+      let subject = 'Notificação do Sistema';
+      let html = '<p>Você tem uma nova notificação.</p>';
+
+      if (type === 'list_updated') {
+        subject = `Lista de Compras Atualizada: ${data.listName}`;
+        html = `<h2>Sua lista "${data.listName}" foi atualizada!</h2>
+                <p>O usuário <strong>${data.userName}</strong> acabou de atualizar a lista de compras.</p>
+                <p>Acesse o aplicativo para ver as mudanças.</p>`;
+      } else if (type === 'expense_added') {
+        subject = `Novo Gasto Registrado: ${data.description}`;
+        html = `<h2>Novo gasto adicionado!</h2>
+                <p><strong>${data.userName}</strong> registrou um novo gasto:</p>
+                <ul>
+                  <li><strong>Descrição:</strong> ${data.description}</li>
+                  <li><strong>Valor:</strong> R$ ${data.amount.toFixed(2)}</li>
+                  <li><strong>Data:</strong> ${data.date}</li>
+                </ul>
+                <p>Acesse o aplicativo para mais detalhes.</p>`;
+      } else if (type === 'account_registered') {
+        subject = `Novo Membro Registrado na Casa`;
+        html = `<h2>Um novo membro entrou!</h2>
+                <p>Diga olá para <strong>${data.userName}</strong>, que acabou de registrar seu perfil na casa.</p>
+                <p>Acesse o aplicativo para gerenciar os membros.</p>`;
+      } else {
+        return res.status(400).json({ error: 'Tipo de notificação inválido.' });
+      }
+
+      const fromEmail = process.env.NOTIFICATION_EMAIL_FROM || 'onboarding@resend.dev';
+
+      const response = await resend.emails.send({
+        from: `Gestor Familiar <${fromEmail}>`,
+        to: emails,
+        subject,
+        html
+      });
+
+      res.status(200).json({ success: true, response });
+    } catch (error: any) {
+      console.error('Error sending email:', error);
+      res.status(500).json({ error: error.message || 'Erro ao enviar notificação.' });
+    }
+  });
+
   app.get('/api/tips/weekly', async (req, res) => {
     try {
       if (!process.env.GEMINI_API_KEY) {
